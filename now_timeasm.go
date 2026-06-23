@@ -3,7 +3,7 @@
 // call that yields wall+monotonic together, so there is nothing to save by
 // splitting it. Keep linking time.now directly.
 
-//go:build windows || (linux && amd64) || plan9
+//go:build windows || linux || plan9
 
 package log
 

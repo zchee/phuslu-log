@@ -453,6 +453,40 @@ const smallsString = "00010203040506070809" +
 	"80818283848586878889" +
 	"90919293949596979899"
 
+// appendUint appends the base-10 representation of u to dst using the
+// smallsString two-digit lookup table. It is specialized for base 10 and
+// inlines better than strconv.AppendUint.
+func appendUint(dst []byte, u uint64) []byte {
+	var a [20]byte
+	i := len(a)
+	for u >= 100 {
+		is := u % 100 * 2
+		u /= 100
+		i -= 2
+		a[i+1] = smallsString[is+1]
+		a[i+0] = smallsString[is+0]
+	}
+	if u >= 10 {
+		is := u * 2
+		i -= 2
+		a[i+1] = smallsString[is+1]
+		a[i+0] = smallsString[is+0]
+	} else {
+		i--
+		a[i] = byte('0' + u)
+	}
+	return append(dst, a[i:]...)
+}
+
+// appendInt appends the base-10 representation of v to dst.
+func appendInt(dst []byte, v int64) []byte {
+	if v < 0 {
+		dst = append(dst, '-')
+		return appendUint(dst, uint64(-v))
+	}
+	return appendUint(dst, uint64(v))
+}
+
 var timeNow = time.Now
 var timeOffset, timeZone = func() (int64, string) {
 	now := timeNow()
@@ -742,13 +776,13 @@ func (e *Entry) TimeFormat(key string, timefmt string, t time.Time) *Entry {
 	e.buf = append(e.buf, '"', ':')
 	switch timefmt {
 	case TimeFormatUnix:
-		e.buf = strconv.AppendInt(e.buf, t.Unix(), 10)
+		e.buf = appendInt(e.buf, t.Unix())
 	case TimeFormatUnixMs:
-		e.buf = strconv.AppendInt(e.buf, t.UnixNano()/1000000, 10)
+		e.buf = appendInt(e.buf, t.UnixNano()/1000000)
 	case TimeFormatUnixWithMs:
-		e.buf = strconv.AppendInt(e.buf, t.Unix(), 10)
+		e.buf = appendInt(e.buf, t.Unix())
 		e.buf = append(e.buf, '.')
-		e.buf = strconv.AppendInt(e.buf, t.UnixNano()/1000000%1000, 10)
+		e.buf = appendInt(e.buf, t.UnixNano()/1000000%1000)
 	default:
 		e.buf = append(e.buf, '"')
 		e.buf = t.AppendFormat(e.buf, timefmt)
@@ -794,13 +828,13 @@ func (e *Entry) TimesFormat(key string, timefmt string, a []time.Time) *Entry {
 		}
 		switch timefmt {
 		case TimeFormatUnix:
-			e.buf = strconv.AppendInt(e.buf, t.Unix(), 10)
+			e.buf = appendInt(e.buf, t.Unix())
 		case TimeFormatUnixMs:
-			e.buf = strconv.AppendInt(e.buf, t.UnixNano()/1000000, 10)
+			e.buf = appendInt(e.buf, t.UnixNano()/1000000)
 		case TimeFormatUnixWithMs:
-			e.buf = strconv.AppendInt(e.buf, t.Unix(), 10)
+			e.buf = appendInt(e.buf, t.Unix())
 			e.buf = append(e.buf, '.')
-			e.buf = strconv.AppendInt(e.buf, t.UnixNano()/1000000%1000, 10)
+			e.buf = appendInt(e.buf, t.UnixNano()/1000000%1000)
 		default:
 			e.buf = append(e.buf, '"')
 			e.buf = t.AppendFormat(e.buf, timefmt)
@@ -857,7 +891,7 @@ func (e *Entry) Dur(key string, d time.Duration) *Entry {
 		d = -d
 		e.buf = append(e.buf, '-')
 	}
-	e.buf = strconv.AppendInt(e.buf, int64(d/time.Millisecond), 10)
+	e.buf = appendInt(e.buf, int64(d/time.Millisecond))
 	if n := (d % time.Millisecond); n != 0 {
 		var tmp [7]byte
 		b := n % 100 * 2
@@ -892,7 +926,7 @@ func (e *Entry) TimeDiff(key string, t time.Time, start time.Time) *Entry {
 	e.buf = append(e.buf, ',', '"')
 	e.buf = append(e.buf, key...)
 	e.buf = append(e.buf, '"', ':')
-	e.buf = strconv.AppendInt(e.buf, int64(d/time.Millisecond), 10)
+	e.buf = appendInt(e.buf, int64(d/time.Millisecond))
 	if n := (d % time.Millisecond); n != 0 {
 		var tmp [7]byte
 		b := n % 100 * 2
@@ -929,7 +963,7 @@ func (e *Entry) Durs(key string, d []time.Duration) *Entry {
 			a = -a
 			e.buf = append(e.buf, '-')
 		}
-		e.buf = strconv.AppendInt(e.buf, int64(a/time.Millisecond), 10)
+		e.buf = appendInt(e.buf, int64(a/time.Millisecond))
 		if n := (a % time.Millisecond); n != 0 {
 			var tmp [7]byte
 			b := n % 100 * 2
@@ -1110,7 +1144,7 @@ func (e *Entry) Int64(key string, i int64) *Entry {
 	e.buf = append(e.buf, ',', '"')
 	e.buf = append(e.buf, key...)
 	e.buf = append(e.buf, '"', ':')
-	e.buf = strconv.AppendInt(e.buf, i, 10)
+	e.buf = appendInt(e.buf, i)
 	return e
 }
 
@@ -1123,7 +1157,7 @@ func (e *Entry) Uint(key string, i uint) *Entry {
 	e.buf = append(e.buf, ',', '"')
 	e.buf = append(e.buf, key...)
 	e.buf = append(e.buf, '"', ':')
-	e.buf = strconv.AppendUint(e.buf, uint64(i), 10)
+	e.buf = appendUint(e.buf, uint64(i))
 	return e
 }
 
@@ -1136,7 +1170,7 @@ func (e *Entry) Uint64(key string, i uint64) *Entry {
 	e.buf = append(e.buf, ',', '"')
 	e.buf = append(e.buf, key...)
 	e.buf = append(e.buf, '"', ':')
-	e.buf = strconv.AppendUint(e.buf, i, 10)
+	e.buf = appendUint(e.buf, i)
 	return e
 }
 
@@ -1149,7 +1183,7 @@ func (e *Entry) Int(key string, i int) *Entry {
 	e.buf = append(e.buf, ',', '"')
 	e.buf = append(e.buf, key...)
 	e.buf = append(e.buf, '"', ':')
-	e.buf = strconv.AppendInt(e.buf, int64(i), 10)
+	e.buf = appendInt(e.buf, int64(i))
 	return e
 }
 
@@ -1162,7 +1196,7 @@ func (e *Entry) Int32(key string, i int32) *Entry {
 	e.buf = append(e.buf, ',', '"')
 	e.buf = append(e.buf, key...)
 	e.buf = append(e.buf, '"', ':')
-	e.buf = strconv.AppendInt(e.buf, int64(i), 10)
+	e.buf = appendInt(e.buf, int64(i))
 	return e
 }
 
@@ -1175,7 +1209,7 @@ func (e *Entry) Int16(key string, i int16) *Entry {
 	e.buf = append(e.buf, ',', '"')
 	e.buf = append(e.buf, key...)
 	e.buf = append(e.buf, '"', ':')
-	e.buf = strconv.AppendInt(e.buf, int64(i), 10)
+	e.buf = appendInt(e.buf, int64(i))
 	return e
 }
 
@@ -1188,7 +1222,7 @@ func (e *Entry) Int8(key string, i int8) *Entry {
 	e.buf = append(e.buf, ',', '"')
 	e.buf = append(e.buf, key...)
 	e.buf = append(e.buf, '"', ':')
-	e.buf = strconv.AppendInt(e.buf, int64(i), 10)
+	e.buf = appendInt(e.buf, int64(i))
 	return e
 }
 
@@ -1201,7 +1235,7 @@ func (e *Entry) Uint32(key string, i uint32) *Entry {
 	e.buf = append(e.buf, ',', '"')
 	e.buf = append(e.buf, key...)
 	e.buf = append(e.buf, '"', ':')
-	e.buf = strconv.AppendUint(e.buf, uint64(i), 10)
+	e.buf = appendUint(e.buf, uint64(i))
 	return e
 }
 
@@ -1214,7 +1248,7 @@ func (e *Entry) Uint16(key string, i uint16) *Entry {
 	e.buf = append(e.buf, ',', '"')
 	e.buf = append(e.buf, key...)
 	e.buf = append(e.buf, '"', ':')
-	e.buf = strconv.AppendUint(e.buf, uint64(i), 10)
+	e.buf = appendUint(e.buf, uint64(i))
 	return e
 }
 
@@ -1227,7 +1261,7 @@ func (e *Entry) Uint8(key string, i uint8) *Entry {
 	e.buf = append(e.buf, ',', '"')
 	e.buf = append(e.buf, key...)
 	e.buf = append(e.buf, '"', ':')
-	e.buf = strconv.AppendUint(e.buf, uint64(i), 10)
+	e.buf = appendUint(e.buf, uint64(i))
 	return e
 }
 
@@ -1244,7 +1278,7 @@ func (e *Entry) Ints64(key string, a []int64) *Entry {
 		if i != 0 {
 			e.buf = append(e.buf, ',')
 		}
-		e.buf = strconv.AppendInt(e.buf, n, 10)
+		e.buf = appendInt(e.buf, n)
 	}
 	e.buf = append(e.buf, ']')
 	return e
@@ -1263,7 +1297,7 @@ func (e *Entry) Ints32(key string, a []int32) *Entry {
 		if i != 0 {
 			e.buf = append(e.buf, ',')
 		}
-		e.buf = strconv.AppendInt(e.buf, int64(n), 10)
+		e.buf = appendInt(e.buf, int64(n))
 	}
 	e.buf = append(e.buf, ']')
 	return e
@@ -1282,7 +1316,7 @@ func (e *Entry) Ints16(key string, a []int16) *Entry {
 		if i != 0 {
 			e.buf = append(e.buf, ',')
 		}
-		e.buf = strconv.AppendInt(e.buf, int64(n), 10)
+		e.buf = appendInt(e.buf, int64(n))
 	}
 	e.buf = append(e.buf, ']')
 	return e
@@ -1301,7 +1335,7 @@ func (e *Entry) Ints8(key string, a []int8) *Entry {
 		if i != 0 {
 			e.buf = append(e.buf, ',')
 		}
-		e.buf = strconv.AppendInt(e.buf, int64(n), 10)
+		e.buf = appendInt(e.buf, int64(n))
 	}
 	e.buf = append(e.buf, ']')
 	return e
@@ -1320,7 +1354,7 @@ func (e *Entry) Ints(key string, a []int) *Entry {
 		if i != 0 {
 			e.buf = append(e.buf, ',')
 		}
-		e.buf = strconv.AppendInt(e.buf, int64(n), 10)
+		e.buf = appendInt(e.buf, int64(n))
 	}
 	e.buf = append(e.buf, ']')
 	return e
@@ -1339,7 +1373,7 @@ func (e *Entry) Uints64(key string, a []uint64) *Entry {
 		if i != 0 {
 			e.buf = append(e.buf, ',')
 		}
-		e.buf = strconv.AppendUint(e.buf, n, 10)
+		e.buf = appendUint(e.buf, n)
 	}
 	e.buf = append(e.buf, ']')
 	return e
@@ -1358,7 +1392,7 @@ func (e *Entry) Uints32(key string, a []uint32) *Entry {
 		if i != 0 {
 			e.buf = append(e.buf, ',')
 		}
-		e.buf = strconv.AppendUint(e.buf, uint64(n), 10)
+		e.buf = appendUint(e.buf, uint64(n))
 	}
 	e.buf = append(e.buf, ']')
 	return e
@@ -1377,7 +1411,7 @@ func (e *Entry) Uints16(key string, a []uint16) *Entry {
 		if i != 0 {
 			e.buf = append(e.buf, ',')
 		}
-		e.buf = strconv.AppendUint(e.buf, uint64(n), 10)
+		e.buf = appendUint(e.buf, uint64(n))
 	}
 	e.buf = append(e.buf, ']')
 	return e
@@ -1396,7 +1430,7 @@ func (e *Entry) Uints8(key string, a []uint8) *Entry {
 		if i != 0 {
 			e.buf = append(e.buf, ',')
 		}
-		e.buf = strconv.AppendUint(e.buf, uint64(n), 10)
+		e.buf = appendUint(e.buf, uint64(n))
 	}
 	e.buf = append(e.buf, ']')
 	return e
@@ -1415,7 +1449,7 @@ func (e *Entry) Uints(key string, a []uint) *Entry {
 		if i != 0 {
 			e.buf = append(e.buf, ',')
 		}
-		e.buf = strconv.AppendUint(e.buf, uint64(n), 10)
+		e.buf = appendUint(e.buf, uint64(n))
 	}
 	e.buf = append(e.buf, ']')
 	return e
@@ -1470,7 +1504,7 @@ func (e *Entry) StrInt(key string, val int64) *Entry {
 	e.buf = append(e.buf, ',', '"')
 	e.buf = append(e.buf, key...)
 	e.buf = append(e.buf, '"', ':', '"')
-	e.buf = strconv.AppendInt(e.buf, val, 10)
+	e.buf = appendInt(e.buf, val)
 	e.buf = append(e.buf, '"')
 	return e
 }
@@ -1663,13 +1697,13 @@ func (e *Entry) IPAddr(key string, ip net.IP) *Entry {
 	e.buf = append(e.buf, '"', ':', '"')
 	if ip4 := ip.To4(); ip4 != nil {
 		_ = ip4[3]
-		e.buf = strconv.AppendInt(e.buf, int64(ip4[0]), 10)
+		e.buf = appendInt(e.buf, int64(ip4[0]))
 		e.buf = append(e.buf, '.')
-		e.buf = strconv.AppendInt(e.buf, int64(ip4[1]), 10)
+		e.buf = appendInt(e.buf, int64(ip4[1]))
 		e.buf = append(e.buf, '.')
-		e.buf = strconv.AppendInt(e.buf, int64(ip4[2]), 10)
+		e.buf = appendInt(e.buf, int64(ip4[2]))
 		e.buf = append(e.buf, '.')
-		e.buf = strconv.AppendInt(e.buf, int64(ip4[3]), 10)
+		e.buf = appendInt(e.buf, int64(ip4[3]))
 	} else if a, ok := netip.AddrFromSlice(ip); ok {
 		e.buf = a.AppendTo(e.buf)
 	}
@@ -1724,30 +1758,30 @@ func (e *Entry) NetAddr(key string, addr net.Addr) *Entry {
 	case *net.TCPAddr:
 		if len(v.IP) == 4 {
 			_ = v.IP[3]
-			e.buf = strconv.AppendInt(e.buf, int64(v.IP[0]), 10)
+			e.buf = appendInt(e.buf, int64(v.IP[0]))
 			e.buf = append(e.buf, '.')
-			e.buf = strconv.AppendInt(e.buf, int64(v.IP[1]), 10)
+			e.buf = appendInt(e.buf, int64(v.IP[1]))
 			e.buf = append(e.buf, '.')
-			e.buf = strconv.AppendInt(e.buf, int64(v.IP[2]), 10)
+			e.buf = appendInt(e.buf, int64(v.IP[2]))
 			e.buf = append(e.buf, '.')
-			e.buf = strconv.AppendInt(e.buf, int64(v.IP[3]), 10)
+			e.buf = appendInt(e.buf, int64(v.IP[3]))
 			e.buf = append(e.buf, ':')
-			e.buf = strconv.AppendInt(e.buf, int64(v.Port), 10)
+			e.buf = appendInt(e.buf, int64(v.Port))
 		} else {
 			e.buf = v.AddrPort().AppendTo(e.buf)
 		}
 	case *net.UDPAddr:
 		if len(v.IP) == 4 {
 			_ = v.IP[3]
-			e.buf = strconv.AppendInt(e.buf, int64(v.IP[0]), 10)
+			e.buf = appendInt(e.buf, int64(v.IP[0]))
 			e.buf = append(e.buf, '.')
-			e.buf = strconv.AppendInt(e.buf, int64(v.IP[1]), 10)
+			e.buf = appendInt(e.buf, int64(v.IP[1]))
 			e.buf = append(e.buf, '.')
-			e.buf = strconv.AppendInt(e.buf, int64(v.IP[2]), 10)
+			e.buf = appendInt(e.buf, int64(v.IP[2]))
 			e.buf = append(e.buf, '.')
-			e.buf = strconv.AppendInt(e.buf, int64(v.IP[3]), 10)
+			e.buf = appendInt(e.buf, int64(v.IP[3]))
 			e.buf = append(e.buf, ':')
-			e.buf = strconv.AppendInt(e.buf, int64(v.Port), 10)
+			e.buf = appendInt(e.buf, int64(v.Port))
 		} else {
 			e.buf = v.AddrPort().AppendTo(e.buf)
 		}
@@ -2024,7 +2058,7 @@ func (e *Entry) caller(n int, pc uintptr, fullpath bool) {
 	e.buf = append(e.buf, "\":\""...)
 	e.buf = append(e.buf, file...)
 	e.buf = append(e.buf, ':')
-	e.buf = strconv.AppendInt(e.buf, int64(line), 10)
+	e.buf = appendInt(e.buf, int64(line))
 	e.buf = append(e.buf, "\",\""...)
 	e.buf = append(e.buf, CallerFuncKey...)
 	e.buf = append(e.buf, "\":\""...)
@@ -2032,7 +2066,7 @@ func (e *Entry) caller(n int, pc uintptr, fullpath bool) {
 	e.buf = append(e.buf, "\",\""...)
 	e.buf = append(e.buf, GoidKey...)
 	e.buf = append(e.buf, "\":"...)
-	e.buf = strconv.AppendInt(e.buf, int64(goid()), 10)
+	e.buf = appendInt(e.buf, int64(goid()))
 }
 
 var escapes = [256]bool{

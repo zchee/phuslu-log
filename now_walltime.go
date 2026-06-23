@@ -7,7 +7,7 @@
 // runtime.walltime carries an explicit compatibility guarantee
 // (go.dev/issue/67401), the same promise time.now relies on.
 
-//go:build !windows && !(linux && amd64) && !plan9
+//go:build !windows && !linux && !plan9
 
 package log
 
