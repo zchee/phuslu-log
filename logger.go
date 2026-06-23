@@ -1992,13 +1992,101 @@ func (e *Entry) Msgf(format string, v ...any) {
 	e.buf = append(e.buf, ",\""...)
 	e.buf = append(e.buf, MessageKey...)
 	e.buf = append(e.buf, "\":\""...)
-	fmt.Fprintf(b, format, v...)
+	if out, ok := appendFormatFast(b.B, format, v); ok {
+		b.B = out
+	} else {
+		b.B = b.B[:0]
+		fmt.Fprintf(b, format, v...)
+	}
 	e.bytes(b.B)
 	e.buf = append(e.buf, '"')
 	if cap(b.B) <= bbcap {
 		bbpool.Put(b)
 	}
 	e.Msg("")
+}
+
+// appendFormatFast handles the common fmt verbs (%s %d %v for string/[]byte and
+// the integer types, plus %%) by writing directly to dst, avoiding fmt's
+// reflection and format-string boxing. It returns ok == false on anything it
+// does not handle — width/precision/flags, other verbs, unhandled arg types, or
+// an arg-count mismatch — so the caller falls back to fmt for byte-identical
+// output.
+func appendFormatFast(dst []byte, format string, args []any) ([]byte, bool) {
+	ai := 0
+	for i := 0; i < len(format); {
+		c := format[i]
+		if c != '%' {
+			dst = append(dst, c)
+			i++
+			continue
+		}
+		if i+1 >= len(format) {
+			return dst, false
+		}
+		verb := format[i+1]
+		if verb == '%' {
+			dst = append(dst, '%')
+			i += 2
+			continue
+		}
+		if ai >= len(args) {
+			return dst, false
+		}
+		switch verb {
+		case 's':
+			switch v := args[ai].(type) {
+			case string:
+				dst = append(dst, v...)
+			case []byte:
+				dst = append(dst, v...)
+			default:
+				return dst, false
+			}
+		case 'd':
+			switch v := args[ai].(type) {
+			case int:
+				dst = appendInt(dst, int64(v))
+			case int8:
+				dst = appendInt(dst, int64(v))
+			case int16:
+				dst = appendInt(dst, int64(v))
+			case int32:
+				dst = appendInt(dst, int64(v))
+			case int64:
+				dst = appendInt(dst, v)
+			case uint:
+				dst = appendUint(dst, uint64(v))
+			case uint8:
+				dst = appendUint(dst, uint64(v))
+			case uint16:
+				dst = appendUint(dst, uint64(v))
+			case uint32:
+				dst = appendUint(dst, uint64(v))
+			case uint64:
+				dst = appendUint(dst, v)
+			default:
+				return dst, false
+			}
+		case 'v':
+			switch v := args[ai].(type) {
+			case string:
+				dst = append(dst, v...)
+			case int:
+				dst = appendInt(dst, int64(v))
+			default:
+				return dst, false
+			}
+		default:
+			return dst, false
+		}
+		ai++
+		i += 2
+	}
+	if ai != len(args) {
+		return dst, false
+	}
+	return dst, true
 }
 
 // Msgs sends the entry with msgs added as the message field if not empty.
